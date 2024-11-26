@@ -1,0 +1,3 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  fun.yannji.data.scope.DataScopeAutoConfiguration
+
