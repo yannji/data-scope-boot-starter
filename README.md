@@ -1,7 +1,7 @@
-### 基于MybatisPlus的通用数据权限插件
+## 基于MybatisPlus的通用数据权限插件
 
-#### 食用方式：
-1. 引入依赖
+### 食用方式：
+#### 1. 引入依赖
 ```xml
 <dependency>
     <groupId>fun.yannji</groupId>
@@ -9,7 +9,21 @@
     <version>1.1.0</version>
 </dependency>
 ```
-2. 定义数据权限类实现 DataScope 接口，并将其加入Spring容器中。
+#### 2. 配置插件
+```java
+@Configuration
+public class MybatisPlusConfig {
+    @Bean
+    public MybatisPlusInterceptor mybatisPlusInterceptor(){
+        MybatisPlusInterceptor mybatisPlusInterceptor = new MybatisPlusInterceptor();
+        mybatisPlusInterceptor.addInnerInterceptor(new DataPermissionInterceptor());
+        return mybatisPlusInterceptor;
+    }
+}
+
+```
+
+#### 3. 定义数据权限类实现 DataScope 接口，并将其加入Spring容器中。
 ```java
 @Component
 public class TestDataScope implements DataScope {
@@ -53,7 +67,7 @@ public class TestDataScope implements DataScope {
     }
 }
 ```
-3. 在需要过滤的查询语句前声明要使用的权限对象
+#### 4. 在需要过滤的查询语句前声明要使用的权限对象
 ```java
 DataScopeHelper.startDataScope("TEST_DATA_SCOPE");
 List<SysRole> sysRoleList = sysRoleDao.listByEntity(param);
