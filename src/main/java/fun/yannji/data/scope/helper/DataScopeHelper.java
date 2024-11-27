@@ -1,6 +1,5 @@
 package fun.yannji.data.scope.helper;
 
-import cn.hutool.core.util.ObjectUtil;
 import fun.yannji.data.scope.DataScope;
 import fun.yannji.data.scope.holder.DataScopeHolder;
 import fun.yannji.data.scope.util.SpringUtil;
@@ -17,7 +16,7 @@ public class DataScopeHelper {
         DataScopeHolder holder = SpringUtil.getBean(DataScopeHolder.class);
         List<DataScope> dataScopes = Arrays.stream(resources)
                 .map(resource -> holder.getDataScopeMap().get(resource))
-                .filter(ObjectUtil::isNotNull)
+                .filter(e -> e != null)
                 .collect(Collectors.toList());
         dataScopeList.set(dataScopes);
     }

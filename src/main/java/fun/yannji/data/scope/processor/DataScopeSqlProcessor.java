@@ -16,10 +16,10 @@
 
 package fun.yannji.data.scope.processor;
 
-import cn.hutool.core.collection.CollectionUtil;
 import com.baomidou.mybatisplus.extension.parser.JsqlParserSupport;
 import fun.yannji.data.scope.DataScope;
-import fun.yannji.data.scope.util.SqlParseUtils;
+import fun.yannji.data.scope.util.CollectionUtil;
+import fun.yannji.data.scope.util.SqlParseUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.expression.*;
@@ -423,7 +423,7 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 		List<Expression> dataFilterExpressions = new ArrayList<>(tables.size());
 		for (Table table : tables) {
 			// 获取表名
-			String tableName = SqlParseUtils.getTableName(table.getName());
+			String tableName = SqlParseUtil.getTableName(table.getName());
 
 			// 进行 dataScope 的表名匹配
 			List<DataScope> matchDataScopes = DataScopeHolder.peek()

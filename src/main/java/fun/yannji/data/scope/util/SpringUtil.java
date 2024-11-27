@@ -1,6 +1,5 @@
 package fun.yannji.data.scope.util;
 
-import cn.hutool.core.util.ArrayUtil;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
@@ -96,11 +95,6 @@ public class SpringUtil implements BeanFactoryPostProcessor, ApplicationContextA
 
     public static String[] getActiveProfiles() {
         return null == applicationContext ? null : applicationContext.getEnvironment().getActiveProfiles();
-    }
-
-    public static String getActiveProfile() {
-        String[] activeProfiles = getActiveProfiles();
-        return ArrayUtil.isNotEmpty(activeProfiles) ? activeProfiles[0] : null;
     }
 
     public static <T> void registerBean(String beanName, T bean) {

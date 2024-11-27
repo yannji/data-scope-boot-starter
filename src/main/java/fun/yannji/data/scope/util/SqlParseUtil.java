@@ -25,9 +25,9 @@ import net.sf.jsqlparser.schema.Table;
  *
  * @author hccake
  */
-public final class SqlParseUtils {
+public final class SqlParseUtil {
 
-	private SqlParseUtils() {
+	private SqlParseUtil() {
 	}
 
 	private static final String MYSQL_ESCAPE_CHARACTER = "`";
