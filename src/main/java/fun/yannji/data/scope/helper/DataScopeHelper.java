@@ -12,9 +12,9 @@ public class DataScopeHelper {
 
     private static final ThreadLocal<List<DataScope>> dataScopeList = new ThreadLocal<>();
 
-    public static void startDataScope(String ...resources) {
+    public static void startDataScope(String ...dataScopeKey) {
         DataScopeHolder holder = SpringUtil.getBean(DataScopeHolder.class);
-        List<DataScope> dataScopes = Arrays.stream(resources)
+        List<DataScope> dataScopes = Arrays.stream(dataScopeKey)
                 .map(resource -> holder.getDataScopeMap().get(resource))
                 .filter(e -> e != null)
                 .collect(Collectors.toList());
