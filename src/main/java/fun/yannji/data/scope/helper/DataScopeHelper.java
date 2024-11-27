@@ -1,9 +1,9 @@
 package fun.yannji.data.scope.helper;
 
 import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.extra.spring.SpringUtil;
 import fun.yannji.data.scope.DataScope;
 import fun.yannji.data.scope.holder.DataScopeHolder;
+import fun.yannji.data.scope.util.SpringUtil;
 
 import java.util.Arrays;
 import java.util.List;

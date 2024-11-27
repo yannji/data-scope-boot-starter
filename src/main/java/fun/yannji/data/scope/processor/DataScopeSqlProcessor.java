@@ -17,8 +17,8 @@
 package fun.yannji.data.scope.processor;
 
 import cn.hutool.core.collection.CollectionUtil;
+import com.baomidou.mybatisplus.extension.parser.JsqlParserSupport;
 import fun.yannji.data.scope.DataScope;
-import fun.yannji.data.scope.parser.JsqlParserSupport;
 import fun.yannji.data.scope.util.SqlParseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -70,20 +70,20 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 		}
 	}
 
-	protected void processSelectBody(SelectBody selectBody) {
+	protected void processSelectBody(Select selectBody) {
 		if (selectBody == null) {
 			return;
 		}
 		if (selectBody instanceof PlainSelect) {
 			processPlainSelect((PlainSelect) selectBody);
 		}
-		else if (selectBody instanceof WithItem) {
-			WithItem withItem = (WithItem) selectBody;
-			processSelectBody(withItem.getSubSelect().getSelectBody());
+		else if (selectBody instanceof ParenthesedSelect) {
+			ParenthesedSelect parenthesedSelect = (ParenthesedSelect) selectBody;
+			processSelectBody(parenthesedSelect.getSelect());
 		}
-		else {
+		else if (selectBody instanceof SetOperationList) {
 			SetOperationList operationList = (SetOperationList) selectBody;
-			List<SelectBody> selectBodys = operationList.getSelects();
+			List<Select> selectBodys = operationList.getSelects();
 			if (CollectionUtil.isNotEmpty(selectBodys)) {
 				selectBodys.forEach(this::processSelectBody);
 			}
@@ -140,7 +140,7 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 	 */
 	protected void processPlainSelect(PlainSelect plainSelect) {
 		// #3087 github
-		List<SelectItem> selectItems = plainSelect.getSelectItems();
+		List<SelectItem<?>> selectItems = plainSelect.getSelectItems();
 		if (CollectionUtil.isNotEmpty(selectItems)) {
 			selectItems.forEach(this::processSelectItem);
 		}
@@ -167,23 +167,16 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 	}
 
 	private List<Table> processFromItem(FromItem fromItem) {
-		// 处理括号括起来的表达式
-		while (fromItem instanceof ParenthesisFromItem) {
-			fromItem = ((ParenthesisFromItem) fromItem).getFromItem();
-		}
-
 		List<Table> mainTables = new ArrayList<>();
 		// 无 join 时的处理逻辑
 		if (fromItem instanceof Table) {
 			Table fromTable = (Table) fromItem;
 			mainTables.add(fromTable);
-		}
-		else if (fromItem instanceof SubJoin) {
+		} else if (fromItem instanceof ParenthesedFromItem ) {
 			// SubJoin 类型则还需要添加上 where 条件
-			List<Table> tables = processSubJoin((SubJoin) fromItem);
+			List<Table> tables = processSubJoin((ParenthesedFromItem) fromItem);
 			mainTables.addAll(tables);
-		}
-		else {
+		} else {
 			// 处理下 fromItem
 			processOtherFromItem(fromItem);
 		}
@@ -213,26 +206,22 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 				BinaryExpression expression = (BinaryExpression) where;
 				processWhereSubSelect(expression.getLeftExpression());
 				processWhereSubSelect(expression.getRightExpression());
-			}
-			else if (where instanceof InExpression) {
+			} else if (where instanceof InExpression) {
 				// in
 				InExpression expression = (InExpression) where;
 				Expression inExpression = expression.getRightExpression();
-				if (inExpression instanceof SubSelect) {
-					processSelectBody(((SubSelect) inExpression).getSelectBody());
+				if (inExpression instanceof Select) {
+					processSelectBody(((Select) inExpression));
 				}
-			}
-			else if (where instanceof ExistsExpression) {
+			} else if (where instanceof ExistsExpression) {
 				// exists
 				ExistsExpression expression = (ExistsExpression) where;
 				processWhereSubSelect(expression.getRightExpression());
-			}
-			else if (where instanceof NotExpression) {
+			} else if (where instanceof NotExpression) {
 				// not exists
 				NotExpression expression = (NotExpression) where;
 				processWhereSubSelect(expression.getExpression());
-			}
-			else if (where instanceof Parenthesis) {
+			} else if (where instanceof Parenthesis) {
 				Parenthesis expression = (Parenthesis) where;
 				processWhereSubSelect(expression.getExpression());
 			}
@@ -240,14 +229,11 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 	}
 
 	protected void processSelectItem(SelectItem selectItem) {
-		if (selectItem instanceof SelectExpressionItem) {
-			SelectExpressionItem selectExpressionItem = (SelectExpressionItem) selectItem;
-			if (selectExpressionItem.getExpression() instanceof SubSelect) {
-				processSelectBody(((SubSelect) selectExpressionItem.getExpression()).getSelectBody());
-			}
-			else if (selectExpressionItem.getExpression() instanceof Function) {
-				processFunction((Function) selectExpressionItem.getExpression());
-			}
+		Expression expression = selectItem.getExpression();
+		if (expression instanceof Select) {
+			processSelectBody(((Select) expression));
+		} else if (expression instanceof Function) {
+			processFunction((Function) expression);
 		}
 	}
 
@@ -262,13 +248,12 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 	 * @param function 待处理函数
 	 */
 	protected void processFunction(Function function) {
-		ExpressionList parameters = function.getParameters();
+		ExpressionList<?> parameters = function.getParameters();
 		if (parameters != null) {
-			parameters.getExpressions().forEach(expression -> {
-				if (expression instanceof SubSelect) {
-					processSelectBody(((SubSelect) expression).getSelectBody());
-				}
-				else if (expression instanceof Function) {
+			parameters.forEach(expression -> {
+				if (expression instanceof Select) {
+					processSelectBody(((Select) expression));
+				} else if (expression instanceof Function) {
 					processFunction((Function) expression);
 				}
 			});
@@ -279,28 +264,11 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 	 * 处理子查询等
 	 */
 	protected void processOtherFromItem(FromItem fromItem) {
-		// 去除括号
-		while (fromItem instanceof ParenthesisFromItem) {
-			fromItem = ((ParenthesisFromItem) fromItem).getFromItem();
-		}
-
-		if (fromItem instanceof SubSelect) {
-			SubSelect subSelect = (SubSelect) fromItem;
-			if (subSelect.getSelectBody() != null) {
-				processSelectBody(subSelect.getSelectBody());
-			}
-		}
-		else if (fromItem instanceof ValuesList) {
-			log.debug("Perform a subquery, if you do not give us feedback");
-		}
-		else if (fromItem instanceof LateralSubSelect) {
-			LateralSubSelect lateralSubSelect = (LateralSubSelect) fromItem;
-			if (lateralSubSelect.getSubSelect() != null) {
-				SubSelect subSelect = lateralSubSelect.getSubSelect();
-				if (subSelect.getSelectBody() != null) {
-					processSelectBody(subSelect.getSelectBody());
-				}
-			}
+		if (fromItem instanceof ParenthesedSelect) {
+			Select subSelect = (Select) fromItem;
+			processSelectBody(subSelect);
+		} else if (fromItem instanceof ParenthesedFromItem) {
+			log.debug("Perform a subQuery, if you do not give us feedback");
 		}
 	}
 
@@ -309,12 +277,15 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 	 * @param subJoin subJoin
 	 * @return Table subJoin 中的主表
 	 */
-	private List<Table> processSubJoin(SubJoin subJoin) {
+	private List<Table> processSubJoin(ParenthesedFromItem subJoin) {
 		List<Table> mainTables = new ArrayList<>();
-		if (subJoin.getJoinList() != null) {
-			List<Table> list = processFromItem(subJoin.getLeft());
+		while (subJoin.getJoins() == null && subJoin.getFromItem() instanceof ParenthesedFromItem) {
+			subJoin = (ParenthesedFromItem) subJoin.getFromItem();
+		}
+		if (subJoin.getJoins() != null) {
+			List<Table> list = processFromItem(subJoin.getFromItem());
 			mainTables.addAll(list);
-			mainTables = processJoins(mainTables, subJoin.getJoinList());
+			processJoins(mainTables, subJoin.getJoins());
 		}
 		return mainTables;
 	}
@@ -352,9 +323,8 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 			if (joinItem instanceof Table) {
 				joinTables = new ArrayList<>();
 				joinTables.add((Table) joinItem);
-			}
-			else if (joinItem instanceof SubJoin) {
-				joinTables = processSubJoin((SubJoin) joinItem);
+			} else if (joinItem instanceof ParenthesedFromItem ) {
+				joinTables = processSubJoin((ParenthesedFromItem ) joinItem);
 			}
 
 			if (joinTables != null) {
@@ -372,28 +342,23 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 				// 如果不要忽略，且是右连接，则记录下当前表
 				if (join.isRight()) {
 					mainTable = joinTable;
+					mainTables.clear();
 					if (leftTable != null) {
 						onTables = Collections.singletonList(leftTable);
 					}
-				}
-				else if (join.isLeft()) {
-					onTables = Collections.singletonList(joinTable);
-				}
-				// JOIN 等同于 INNER JOIN
-				else if (join.isInner() || join.getASTNode().jjtGetFirstToken().toString().equalsIgnoreCase("JOIN")) {
+				} else if (join.isInner()) {
 					if (mainTable == null) {
 						onTables = Collections.singletonList(joinTable);
-					}
-					else {
+					} else {
 						onTables = Arrays.asList(mainTable, joinTable);
 					}
 					mainTable = null;
+					mainTables.clear();
+				} else {
+					onTables = Collections.singletonList(joinTable);
 				}
 
-				// TODO 参看 net.sf.jsqlparser.statement.select.Join#ToString 的逻辑，实现其他的 JOIN
-
-				mainTables = new ArrayList<>();
-				if (mainTable != null) {
+				if (mainTable != null && !mainTables.contains(mainTable)) {
 					mainTables.add(mainTable);
 				}
 
@@ -404,7 +369,7 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 					List<Expression> onExpressions = new LinkedList<>();
 					onExpressions.add(injectExpression(originOnExpressions.iterator().next(), onTables));
 					join.setOnExpressions(onExpressions);
-					leftTable = joinTable;
+					leftTable = mainTable == null ? joinTable : mainTable;
 					continue;
 				}
 				// 表名压栈，忽略的表压入 null，以便后续不处理
@@ -414,7 +379,7 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 					Collection<Expression> onExpressions = new LinkedList<>();
 					for (Expression originOnExpression : originOnExpressions) {
 						List<Table> currentTableList = onTableDeque.poll();
-						if (CollectionUtil.isEmpty(currentTableList)) {
+						if (CollectionUtils.isEmpty(currentTableList)) {
 							onExpressions.add(originOnExpression);
 						}
 						else {
@@ -424,12 +389,10 @@ public class DataScopeSqlProcessor extends JsqlParserSupport {
 					join.setOnExpressions(onExpressions);
 				}
 				leftTable = joinTable;
-			}
-			else {
+			} else {
 				processOtherFromItem(joinItem);
 				leftTable = null;
 			}
-
 		}
 
 		return mainTables;
